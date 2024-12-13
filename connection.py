@@ -73,7 +73,10 @@ class DatabaseConnectionApp(QWidget):
         self.setLayout(self.main_layout)
     
     def hash_password(self, password):
-        return hashpw(password.encode('utf-8'),gensalt()).decode('utf-8')
+            # Utiliser hashlib pour hacher le mot de passe avec SHA-256
+        sha256_hash = hashlib.sha256()  # Crée une instance de l'algorithme SHA-256
+        sha256_hash.update(password.encode('utf-8'))  # Convertir le mot de passe en bytes et le hacher
+        return sha256_hash.hexdigest()  # Retourne le hachage en format hexadécimal
 
     def connect_to_database(self):
         # Récupérer les valeurs saisies
