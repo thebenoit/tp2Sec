@@ -3,7 +3,13 @@ from PyQt6.QtWidgets import (
     QApplication, QWidget, QLabel, QLineEdit, QPushButton, QGridLayout, QMessageBox, QVBoxLayout, QScrollArea
 )
 import oracledb as db
+import cx_Oracle 
 import hashlib
+from bcrypt import hashpw, gensalt
+import os
+
+# Spécifie manuellement le chemin vers Instant Client
+os.environ["PATH"] = r"C:\oracle\instantclient_19_12;" + os.environ["PATH"]
 
 class DatabaseConnectionApp(QWidget):
     def __init__(self):
@@ -20,7 +26,7 @@ class DatabaseConnectionApp(QWidget):
         # Formulaire pour les informations de connexion
         self.form_layout = QGridLayout()
         self.form_layout.addWidget(QLabel("Nom d'utilisateur:"), 0, 0)
-        self.username_input = QLineEdit()
+        self.username_input = QLineEdit("Entreprise_admin")
         self.form_layout.addWidget(self.username_input, 0, 1)
 
         self.form_layout.addWidget(QLabel("Mot de passe:"), 1, 0)
@@ -37,7 +43,7 @@ class DatabaseConnectionApp(QWidget):
         self.form_layout.addWidget(self.port_input, 3, 1)
 
         self.form_layout.addWidget(QLabel("Nom du service:"), 4, 0)
-        self.service_name_input = QLineEdit("freepdb1")
+        self.service_name_input = QLineEdit("Entreprise_db")
         self.form_layout.addWidget(self.service_name_input, 4, 1)
 
         # Bouton de connexion
@@ -45,7 +51,7 @@ class DatabaseConnectionApp(QWidget):
         self.connect_button.clicked.connect(self.connect_to_database)
         self.form_layout.addWidget(self.connect_button, 5, 0, 1, 2)
         # Ajouter un champ de recherche (vulnérable)
-        self.form_layout.addWidget(QLabel("Recherche par nom (vulnérable) :"), 6, 0)
+        self.form_layout.addWidget(QLabel("Recherche par nom (non vulnérable) :"), 6, 0)
         self.search_input = QLineEdit()
         self.form_layout.addWidget(self.search_input, 6, 1)
         self.search_button = QPushButton("Rechercher")
@@ -67,10 +73,7 @@ class DatabaseConnectionApp(QWidget):
         self.setLayout(self.main_layout)
     
     def hash_password(self, password):
-        #fonction pour hacher un mot de passe avec SHA256
-        sha256_hash = hashlib.sha256()
-        sha256_hash.update(password.encode('utf-8')) # Convertir en bytes
-        return sha256_hash.hexdigest()
+        return hashpw(password.encode('utf-8'),gensalt()).decode('utf-8')
 
     def connect_to_database(self):
         # Récupérer les valeurs saisies
@@ -80,9 +83,7 @@ class DatabaseConnectionApp(QWidget):
         port = self.port_input.text()
         service_name = self.service_name_input.text()
         
-        # Hacher le mot de passe avant de l'utiliser
-        hashed_password = self.hash_password(password)
-        print(f"Mot de passe haché : {hashed_password}") # Pour vérifier
+       
 
         try:
             # Création du DSN et connexion
@@ -91,12 +92,24 @@ class DatabaseConnectionApp(QWidget):
 
             # Exécuter une requête (remplacez par une table existante)
             cursor = connection.cursor()
-            cursor.execute("SELECT * FROM employees FETCH FIRST 10 ROWS ONLY")  # Exemple avec hr.employees
+            cursor.execute("SELECT * FROM departements FETCH FIRST 10 ROWS ONLY")  # Exemple avec hr.employees
             data = cursor.fetchall()
             columns = [desc[0] for desc in cursor.description]  # Noms des colonnes
+            print(f"Colonnes disponibles : {columns}")
+
+            
+              # Appliquer le hachage sur la colonne "Localisation"
+            hashed_data = []
+            for row in data:
+                row = list(row)  # Convertir le tuple en liste pour modification
+                if "LOCALISATION" in columns:  # Vérifie si la colonne existe
+                    print("Localisation existe")
+                    loc_index = columns.index("LOCALISATION")  # Récupère l'index de la colonne
+                    row[loc_index] = self.hash_password(row[loc_index]) if row[loc_index] else None  # Hache la localisation si elle existe
+                hashed_data.append(tuple(row))  # Reconvertir en tuple pour consistance
 
             # Afficher les données dans le QGridLayout
-            self.display_data(columns, data)
+            self.display_data(columns, hashed_data)
 
             # Fermer la connexion
             cursor.close()
@@ -138,14 +151,26 @@ class DatabaseConnectionApp(QWidget):
             connection = db.connect(user=username, password=password, dsn=dsn)
             cursor = connection.cursor()
             # Requête sécurisée avec des paramètres liés
-            query = "SELECT * FROM employees WHERE first_name LIKE :search_term"
+            query = "SELECT * FROM departements WHERE NOM_DEPARTEMENT LIKE :search_term"
             print(f'{search_term}')
-            cursor.execute(query, {'search_term': f'{search_term}'})
+            cursor.execute(query, {'search_term': f'%{search_term}%'})
             print(query)
             data = cursor.fetchall()
             columns = [desc[0] for desc in cursor.description]  # Obtenir les noms de colonnes
+            
+               # Appliquer le hachage sur la colonne "Localisation"
+            hashed_data = []
+            for row in data:
+                row = list(row)  # Convertir le tuple en liste pour modification
+                if "LOCALISATION" in columns:  # Vérifie si la colonne existe
+                    print("Localisation existe")
+                    loc_index = columns.index("LOCALISATION")  # Récupère l'index de la colonne
+                    row[loc_index] = self.hash_password(row[loc_index]) if row[loc_index] else None  # Hache la localisation si elle existe
+                hashed_data.append(tuple(row))  # Reconvertir en tuple pour consistance
+
+            
             # Afficher les résultats de la recherche
-            self.display_data(columns, data)
+            self.display_data(columns, hashed_data)
             # Fermer la connexion
             cursor.close()
             connection.close()
